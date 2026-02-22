@@ -22,8 +22,8 @@ import { toast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { useDocuments } from '@/hooks/useDocuments';
 import { useImages } from '@/hooks/useImages';
-import { 
-  LayoutDashboard, FileText, Upload, BookOpen, 
+import {
+  LayoutDashboard, FileText, Upload, BookOpen,
   BarChart3, Users, FolderOpen, ImageIcon
 } from 'lucide-react';
 
@@ -38,27 +38,42 @@ import { SyllabusManager } from '@/components/Admin/SyllabusManager';
 import { UserMonitoring, ActivityItem } from '@/components/Admin/UserMonitoring';
 import { ContentModules } from '@/components/Admin/ContentModules';
 
+// Hooks
+import { useAdminUsers } from '@/hooks/useAdminUsers';
+
 // Types and Demo Data
-import { 
-  FileItem, AdminStats as AdminStatsType, 
-  CATEGORIES, SUBCATEGORIES, 
-  DEMO_FILES, DEMO_STATS, DEMO_ACTIVITY 
+import {
+  FileItem, AdminStats as AdminStatsType,
+  CATEGORIES, SUBCATEGORIES
 } from '@/types/admin';
+import { MONGODB_API_URL } from '@/services/api/config';
 
 const Admin = () => {
   const { isDemoMode } = useAuth();
   const { documents, uploadDocument, updateDocument, deleteDocument, getPublicUrl, refetch } = useDocuments();
   const { images, uploadImage, deleteImage, getImageUrl, refetch: refetchImages } = useImages();
-  
+  const { users } = useAdminUsers();
+
   // State
   const [files, setFiles] = useState<FileItem[]>([]);
   const [imageList, setImageList] = useState<ImageItem[]>([]);
-  const [stats, setStats] = useState<AdminStatsType>(DEMO_STATS);
+  const [stats, setStats] = useState<AdminStatsType>({
+    totalVisitors: 0,
+    totalDownloads: 0,
+    totalUploads: 0,
+    totalUsers: 0,
+    syllabusDownloads: 0,
+    booksDownloads: 0,
+    papersDownloads: 0,
+    notesDownloads: 0,
+    tirukuralDownloads: 0,
+    tamilScholarsDownloads: 0,
+  });
   const [recentActivity, setRecentActivity] = useState<ActivityItem[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [activeTab, setActiveTab] = useState('overview');
-  
+
   // Dialog states
   const [editFile, setEditFile] = useState<FileItem | null>(null);
   const [editForm, setEditForm] = useState({ title: '', description: '' });
@@ -66,13 +81,9 @@ const Admin = () => {
   const [deleteImageItem, setDeleteImageItem] = useState<ImageItem | null>(null);
   const [uploadPreset, setUploadPreset] = useState<{ category: string; subcategory: string } | null>(null);
 
-  // Load data based on mode
+  // Load data from backend
   useEffect(() => {
-    if (isDemoMode) {
-      setFiles(DEMO_FILES);
-      setStats(DEMO_STATS);
-      setRecentActivity(DEMO_ACTIVITY);
-    } else if (documents) {
+    if (documents) {
       const mappedFiles: FileItem[] = documents.map(doc => ({
         id: doc.id,
         title: doc.title,
@@ -88,27 +99,74 @@ const Admin = () => {
         isVisible: true,
       }));
       setFiles(mappedFiles);
-      
-      // Calculate stats from documents
-      const totalDownloads = documents.reduce((sum, doc) => sum + (doc.download_count || 0), 0);
-      setStats({
-        totalVisitors: 12458,
-        totalDownloads,
-        totalUploads: documents.length,
-        totalUsers: 1856,
-        syllabusDownloads: documents.filter(d => d.category === 'Syllabus').reduce((sum, d) => sum + (d.download_count || 0), 0),
-        booksDownloads: documents.filter(d => d.category === 'School Books').reduce((sum, d) => sum + (d.download_count || 0), 0),
-        papersDownloads: documents.filter(d => d.category === 'Previous Papers').reduce((sum, d) => sum + (d.download_count || 0), 0),
-        notesDownloads: documents.filter(d => d.category === 'Study Notes').reduce((sum, d) => sum + (d.download_count || 0), 0),
-        tirukuralDownloads: documents.filter(d => d.category === 'Tirukural').reduce((sum, d) => sum + (d.download_count || 0), 0),
-        tamilScholarsDownloads: documents.filter(d => d.category === 'Tamil Scholars').reduce((sum, d) => sum + (d.download_count || 0), 0),
-      });
     }
-  }, [isDemoMode, documents]);
+
+    // Fetch real stats from the backend
+    const fetchStats = async () => {
+      try {
+        const userId = localStorage.getItem('user_id');
+        const response = await fetch(`${MONGODB_API_URL}/admin/stats`, {
+          headers: { 'user-id': userId || '' },
+        });
+        const data = await response.json();
+        if (data.success && data.data) {
+          setStats({
+            totalVisitors: data.data.totalVisitors || 0,
+            totalDownloads: data.data.totalDownloads || 0,
+            totalUploads: data.data.totalUploads || (documents ? documents.length : 0),
+            totalUsers: data.data.totalUsers || 0,
+            syllabusDownloads: data.data.syllabusDownloads || 0,
+            booksDownloads: data.data.booksDownloads || 0,
+            papersDownloads: data.data.papersDownloads || 0,
+            notesDownloads: data.data.notesDownloads || 0,
+            tirukuralDownloads: data.data.tirukuralDownloads || 0,
+            tamilScholarsDownloads: data.data.tamilScholarsDownloads || 0,
+          });
+        }
+      } catch (error) {
+        console.error('Failed to fetch admin stats:', error);
+      }
+    };
+
+    // Fetch recent activity from the backend
+    const fetchActivity = async () => {
+      try {
+        const userId = localStorage.getItem('user_id');
+        const response = await fetch(`${MONGODB_API_URL}/admin/activity`, {
+          headers: { 'user-id': userId || '' },
+        });
+        const data = await response.json();
+        if (data.success && data.data) {
+          setRecentActivity(data.data.map((item: any, index: number) => ({
+            id: String(index),
+            type: item.type === 'user_registered' ? 'login' : 'upload',
+            description: item.type === 'user_registered'
+              ? `${item.user} registered`
+              : item.action,
+            timestamp: new Date(item.timestamp).toLocaleString(),
+            user: item.user,
+          })));
+        }
+      } catch (error) {
+        console.error('Failed to fetch activity:', error);
+      }
+    };
+
+    fetchStats();
+    fetchActivity();
+
+    // Set up polling for live updates
+    const interval = setInterval(() => {
+      fetchStats();
+      fetchActivity();
+    }, 30000); // Poll every 30 seconds
+
+    return () => clearInterval(interval);
+  }, [documents]);
 
   // Load images
   useEffect(() => {
-    if (!isDemoMode && images) {
+    if (images) {
       const mappedImages: ImageItem[] = images.map(img => ({
         id: img.id,
         title: img.title,
@@ -123,108 +181,67 @@ const Admin = () => {
       }));
       setImageList(mappedImages);
     }
-  }, [isDemoMode, images]);
+  }, [images]);
 
   // Handlers
   const handleUpload = async (uploadedFiles: File[], formData: UploadFormData) => {
     setIsUploading(true);
-    
+
     for (const file of uploadedFiles) {
-      if (isDemoMode) {
-        const newFile: FileItem = {
-          id: Date.now().toString() + Math.random(),
-          title: formData.title,
-          description: formData.description,
-          category: formData.category,
-          subcategory: formData.subcategory,
-          file_name: file.name,
-          file_path: `/demo/${file.name}`,
-          download_count: 0,
-          view_count: 0,
-          created_at: new Date().toISOString(),
-          file_size: file.size,
-          isVisible: true,
-        };
-        setFiles(prev => [newFile, ...prev]);
-        setStats(prev => ({ ...prev, totalUploads: prev.totalUploads + 1 }));
-      } else {
-        try {
-          await uploadDocument(file, formData.title, formData.description, formData.category, formData.subcategory);
-        } catch (error) {
-          toast({ title: "Error", description: `Failed to upload ${file.name}`, variant: "destructive" });
-        }
+      try {
+        await uploadDocument(file, formData.title, formData.description, formData.category, formData.subcategory);
+      } catch (error) {
+        toast({ title: "Error", description: `Failed to upload ${file.name}`, variant: "destructive" });
       }
     }
-    
-    if (!isDemoMode) await refetch();
+
+    await refetch();
     toast({ title: "Success", description: `${uploadedFiles.length} file(s) uploaded successfully` });
     setIsUploading(false);
     setUploadPreset(null);
   };
 
   const handleView = (file: FileItem) => {
-    if (isDemoMode) {
-      toast({ title: "Demo Mode", description: `Viewing: ${file.title}` });
-    } else {
-      window.open(getPublicUrl(file.file_path), '_blank');
-    }
+    window.open(getPublicUrl(file.file_path), '_blank');
   };
 
   const handleEdit = async () => {
     if (!editFile) return;
-    
-    if (isDemoMode) {
-      setFiles(prev => prev.map(f => 
-        f.id === editFile.id 
-          ? { ...f, title: editForm.title, description: editForm.description }
-          : f
-      ));
-      toast({ title: "Updated", description: "File details updated (Demo Mode)" });
-    } else {
-      try {
-        await updateDocument(editFile.id, { 
-          title: editForm.title, 
-          description: editForm.description 
-        });
-        await refetch();
-      } catch {
-        toast({ title: "Error", description: "Failed to update file", variant: "destructive" });
-      }
+
+    try {
+      await updateDocument(editFile.id, {
+        title: editForm.title,
+        description: editForm.description
+      });
+      await refetch();
+      toast({ title: "Updated", description: "File details updated successfully" });
+    } catch {
+      toast({ title: "Error", description: "Failed to update file", variant: "destructive" });
     }
     setEditFile(null);
   };
 
   const handleDelete = async () => {
     if (!deleteFile) return;
-    
-    if (isDemoMode) {
-      setFiles(prev => prev.filter(f => f.id !== deleteFile.id));
-      setStats(prev => ({ ...prev, totalUploads: prev.totalUploads - 1 }));
-      toast({ title: "Deleted", description: "File deleted (Demo Mode)" });
-    } else {
-      try {
-        await deleteDocument(deleteFile as any);
-        await refetch();
-        toast({ title: "Deleted", description: "File deleted successfully" });
-      } catch {
-        toast({ title: "Error", description: "Failed to delete file", variant: "destructive" });
-      }
+
+    try {
+      await deleteDocument(deleteFile as any);
+      await refetch();
+      toast({ title: "Deleted", description: "File deleted successfully" });
+    } catch {
+      toast({ title: "Error", description: "Failed to delete file", variant: "destructive" });
     }
     setDeleteFile(null);
   };
 
   const handleToggleVisibility = (file: FileItem) => {
-    if (isDemoMode) {
-      setFiles(prev => prev.map(f => 
-        f.id === file.id ? { ...f, isVisible: !f.isVisible } : f
-      ));
-      toast({ 
-        title: file.isVisible ? "Hidden" : "Visible", 
-        description: `File ${file.isVisible ? 'hidden from' : 'visible to'} users` 
-      });
-    } else {
-      toast({ title: "Info", description: "Visibility toggle available in production" });
-    }
+    setFiles(prev => prev.map(f =>
+      f.id === file.id ? { ...f, isVisible: !f.isVisible } : f
+    ));
+    toast({
+      title: file.isVisible ? "Hidden" : "Visible",
+      description: `File ${file.isVisible ? 'hidden from' : 'visible to'} users`
+    });
   };
 
   const handleUploadClick = (category: string, subcategory: string) => {
@@ -239,20 +256,16 @@ const Admin = () => {
   // Image handlers
   const handleImageUpload = async (uploadedFiles: File[], formData: ImageUploadFormData) => {
     setIsUploadingImage(true);
-    
+
     for (const file of uploadedFiles) {
-      if (isDemoMode) {
-        toast({ title: "Demo Mode", description: `Image "${formData.title}" uploaded (demo)` });
-      } else {
-        try {
-          await uploadImage(file, formData.title, formData.description, formData.category, formData.subcategory);
-        } catch (error) {
-          toast({ title: "Error", description: `Failed to upload ${file.name}`, variant: "destructive" });
-        }
+      try {
+        await uploadImage(file, formData.title, formData.description, formData.category, formData.subcategory);
+      } catch (error) {
+        toast({ title: "Error", description: `Failed to upload ${file.name}`, variant: "destructive" });
       }
     }
-    
-    if (!isDemoMode) await refetchImages();
+
+    await refetchImages();
     toast({ title: "Success", description: `${uploadedFiles.length} image(s) uploaded successfully` });
     setIsUploadingImage(false);
   };
@@ -269,16 +282,13 @@ const Admin = () => {
 
   const handleDeleteImage = async () => {
     if (!deleteImageItem) return;
-    
-    if (isDemoMode) {
-      toast({ title: "Deleted", description: "Image deleted (Demo Mode)" });
-    } else {
-      try {
-        await deleteImage(deleteImageItem.file_path);
-        await refetchImages();
-      } catch {
-        toast({ title: "Error", description: "Failed to delete image", variant: "destructive" });
-      }
+
+    try {
+      await deleteImage(deleteImageItem.file_path);
+      await refetchImages();
+      toast({ title: "Deleted", description: "Image deleted successfully" });
+    } catch {
+      toast({ title: "Error", description: "Failed to delete image", variant: "destructive" });
     }
     setDeleteImageItem(null);
   };
@@ -292,10 +302,10 @@ const Admin = () => {
   };
 
   const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString('en-IN', { 
-      year: 'numeric', 
-      month: 'short', 
-      day: 'numeric' 
+    return new Date(dateStr).toLocaleDateString('en-IN', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
     });
   };
 
@@ -312,7 +322,7 @@ const Admin = () => {
   return (
     <div className="min-h-screen bg-gradient-soft">
       <AdminHeader />
-      
+
       <div className="container mx-auto px-4 py-6 space-y-6">
         {/* Stats Overview */}
         <AdminStats stats={stats} />
@@ -352,7 +362,7 @@ const Admin = () => {
 
           {/* Overview Tab - Content Modules */}
           <TabsContent value="overview">
-            <ContentModules 
+            <ContentModules
               fileCounts={fileCounts}
               onManageClick={handleManageCategory}
             />
@@ -415,7 +425,9 @@ const Admin = () => {
             <UserMonitoring
               stats={stats}
               files={files}
+              users={users}
               recentActivity={recentActivity}
+              view="analytics"
             />
           </TabsContent>
 
@@ -424,7 +436,9 @@ const Admin = () => {
             <UserMonitoring
               stats={stats}
               files={files}
+              users={users}
               recentActivity={recentActivity}
+              view="monitoring"
             />
           </TabsContent>
         </Tabs>

@@ -1,10 +1,13 @@
+import { useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { 
-  Users, Download, Eye, TrendingUp, FileText, 
-  Clock, BarChart3, Activity
+import { Input } from '@/components/ui/input';
+import {
+  Users, Download, Eye, TrendingUp, FileText,
+  Clock, BarChart3, Activity, Search,
+  Mail, Shield, Calendar
 } from 'lucide-react';
-import { FileItem } from '@/types/admin';
+import { FileItem, User } from '@/types/admin';
 
 interface UserMonitoringProps {
   stats: {
@@ -18,7 +21,9 @@ interface UserMonitoringProps {
     notesDownloads: number;
   };
   files: FileItem[];
+  users: User[];
   recentActivity: ActivityItem[];
+  view?: 'analytics' | 'monitoring';
 }
 
 export interface ActivityItem {
@@ -29,7 +34,13 @@ export interface ActivityItem {
   user?: string;
 }
 
-export const UserMonitoring = ({ stats, files, recentActivity }: UserMonitoringProps) => {
+export const UserMonitoring = ({ stats, files, users, recentActivity, view = 'analytics' }: UserMonitoringProps) => {
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const filteredUsers = users.filter(user =>
+    user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    user.email.toLowerCase().includes(searchQuery.toLowerCase())
+  );
   const topDownloaded = [...files]
     .sort((a, b) => b.download_count - a.download_count)
     .slice(0, 5);
@@ -44,6 +55,91 @@ export const UserMonitoring = ({ stats, files, recentActivity }: UserMonitoringP
     { name: 'Previous Papers', count: stats.papersDownloads, color: 'bg-red-500' },
     { name: 'Notes', count: stats.notesDownloads, color: 'bg-teal-500' },
   ];
+
+  if (view === 'monitoring') {
+    return (
+      <div className="space-y-6">
+        {/* Registered Users List */}
+        <Card className="p-4 sm:p-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+            <div className="flex items-center gap-2">
+              <Users className="h-5 w-5 text-primary" />
+              <h3 className="font-semibold text-lg">Registered Users</h3>
+              <Badge variant="secondary" className="ml-2">
+                {users.length} Total
+              </Badge>
+            </div>
+            <div className="relative w-full sm:w-72">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search users..."
+                className="pl-9"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b text-muted-foreground">
+                  <th className="text-left py-3 px-4 font-medium">User</th>
+                  <th className="text-left py-3 px-4 font-medium">Email</th>
+                  <th className="text-left py-3 px-4 font-medium">Role</th>
+                  <th className="text-left py-3 px-4 font-medium">Joined Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredUsers.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="py-8 text-center text-muted-foreground">
+                      No users found matching your search
+                    </td>
+                  </tr>
+                ) : (
+                  filteredUsers.map((user) => (
+                    <tr key={user._id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary">
+                            {user.name.charAt(0).toUpperCase()}
+                          </div>
+                          <span className="font-medium">{user.name}</span>
+                        </div>
+                      </td>
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-2 text-muted-foreground">
+                          <Mail className="h-3.5 w-3.5" />
+                          {user.email}
+                        </div>
+                      </td>
+                      <td className="py-3 px-4">
+                        <Badge variant={user.role === 'admin' ? 'default' : 'secondary'} className="gap-1">
+                          <Shield className="h-3 w-3" />
+                          {user.role}
+                        </Badge>
+                      </td>
+                      <td className="py-3 px-4 text-muted-foreground">
+                        <div className="flex items-center gap-2">
+                          <Calendar className="h-3.5 w-3.5" />
+                          {new Date(user.createdAt).toLocaleDateString('en-IN', {
+                            year: 'numeric',
+                            month: 'short',
+                            day: 'numeric'
+                          })}
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -115,8 +211,8 @@ export const UserMonitoring = ({ stats, files, recentActivity }: UserMonitoringP
                 <div className="h-2 bg-muted rounded-full overflow-hidden">
                   <div
                     className={`h-full ${item.color} rounded-full transition-all`}
-                    style={{ 
-                      width: `${Math.min((item.count / Math.max(stats.totalDownloads, 1)) * 100, 100)}%` 
+                    style={{
+                      width: `${Math.min((item.count / Math.max(stats.totalDownloads, 1)) * 100, 100)}%`
                     }}
                   />
                 </div>

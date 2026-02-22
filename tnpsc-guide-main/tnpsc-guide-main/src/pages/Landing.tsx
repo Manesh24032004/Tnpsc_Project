@@ -1,3 +1,4 @@
+import { useRef, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Footer } from '@/components/Layout/Footer';
@@ -8,9 +9,11 @@ import {
   CarouselNext,
   CarouselPrevious
 } from '@/components/ui/carousel';
-import { LogIn, UserPlus, Bot, BookOpen, FileText, GraduationCap, Brain, BookMarked, Users, Sparkles, MapPin, Award, FileCheck, Shield } from 'lucide-react';
+import { LogIn, UserPlus, Bot, BookOpen, FileText, GraduationCap, Brain, BookMarked, Users, Sparkles, MapPin, Award, FileCheck } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import Autoplay from 'embla-carousel-autoplay';
+import { useAuth } from '@/hooks/useAuth';
+import { toast } from '@/hooks/use-toast';
 
 // Import images
 import tnpscBuilding from '@/assets/tnpsc-building.jpg';
@@ -90,6 +93,27 @@ const selectionProcess = [
 ];
 
 export const Landing = () => {
+  const { user } = useAuth();
+  const lastToastTime = useRef<number>(0);
+
+  const handleUnauthenticatedClick = useCallback((e: React.MouseEvent) => {
+    // Don't intercept clicks on links or buttons (Login/Register)
+    const target = e.target as HTMLElement;
+    if (target.closest('a') || target.closest('button') || target.closest('iframe')) return;
+
+    if (!user) {
+      const now = Date.now();
+      if (now - lastToastTime.current > 2000) {
+        lastToastTime.current = now;
+        toast({
+          title: "Authentication Required",
+          description: "Please login and continue",
+          variant: "destructive",
+        });
+      }
+    }
+  }, [user]);
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
       {/* Header - Increased height by 20% */}
@@ -121,17 +145,6 @@ export const Landing = () => {
                 <span className="hidden sm:inline">Register</span>
               </Link>
             </Button>
-            <Button
-              asChild
-              size="sm"
-              className="bg-gradient-to-r from-red-500 to-orange-500 text-white hover:from-red-600 hover:to-orange-600 font-semibold text-xs md:text-sm shadow-lg"
-              title="Admin Login"
-            >
-              <Link to="/admin-login" className="flex items-center gap-1 md:gap-2">
-                <Shield className="h-3 w-3 md:h-4 md:w-4" />
-                <span className="hidden sm:inline">Admin</span>
-              </Link>
-            </Button>
           </div>
         </div>
       </header>
@@ -153,7 +166,7 @@ export const Landing = () => {
         </div>
       </div>
 
-      <main className="flex-1">
+      <main className="flex-1" onClick={handleUnauthenticatedClick}>
         {/* Main Content Section - TNPSC Building + Carousel */}
         <section className="container mx-auto px-4 py-6 md:py-8">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-8 items-center">

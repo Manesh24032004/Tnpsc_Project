@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 
-const documentSchema = new mongoose.Schema(
+const imageSchema = new mongoose.Schema(
     {
         title: {
             type: String,
@@ -14,7 +14,6 @@ const documentSchema = new mongoose.Schema(
         category: {
             type: String,
             required: [true, 'Category is required'],
-            // Enum removed to allow for dynamic categories/folders in MongoDB
         },
         subcategory: {
             type: String,
@@ -31,13 +30,9 @@ const documentSchema = new mongoose.Schema(
         fileSize: {
             type: Number,
         },
-        pdfUrl: {
+        url: {
             type: String,
-            default: '', // Empty string for future cloud storage URL
-        },
-        downloadCount: {
-            type: Number,
-            default: 0,
+            default: '',
         },
         uploadedBy: {
             type: mongoose.Schema.Types.ObjectId,
@@ -49,6 +44,6 @@ const documentSchema = new mongoose.Schema(
     }
 );
 
-const DocumentModel = mongoose.model('Document', documentSchema);
+const ImageModel = mongoose.model('Image', imageSchema);
 
-module.exports = { DocumentModel };
+module.exports = { ImageModel };

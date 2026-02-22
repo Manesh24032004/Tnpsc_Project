@@ -27,7 +27,7 @@ const registerSchema = z.object({
 
 const Auth = () => {
   const navigate = useNavigate();
-  const { user, signIn, signUp, loading } = useAuth();
+  const { user, signIn, signUp, loading, isAdmin } = useAuth();
 
   const [loginForm, setLoginForm] = useState({ email: '', password: '' });
   const [registerForm, setRegisterForm] = useState({
@@ -43,9 +43,13 @@ const Auth = () => {
 
   useEffect(() => {
     if (!loading && user) {
-      navigate('/home');
+      if (isAdmin) {
+        navigate('/admin');
+      } else {
+        navigate('/home');
+      }
     }
-  }, [user, loading, navigate]);
+  }, [user, loading, isAdmin, navigate]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -85,7 +89,7 @@ const Auth = () => {
         title: "Login Successful",
         description: "Welcome back!",
       });
-      navigate('/home');
+      // signIn already sets isAdmin, the useEffect will handle redirect
     }
   };
 

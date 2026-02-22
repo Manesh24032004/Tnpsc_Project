@@ -23,6 +23,8 @@ import {
 } from 'lucide-react';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { useAuth } from '@/hooks/useAuth';
+import { authService } from '@/services/api/authService';
+import { MONGODB_API_URL } from '@/services/api/config';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -76,10 +78,7 @@ export const Navbar = () => {
     { id: 1, message: 'Welcome to TNPSC Wizard!', read: false },
     { id: 2, message: 'New syllabus updated!', read: false },
   ]);
-  const [bookmarks, setBookmarks] = useState<{ id: number, text: string, createdAt: Date }[]>(() => {
-    const saved = localStorage.getItem('tnpsc-bookmarks');
-    return saved ? JSON.parse(saved) : [];
-  });
+  const [bookmarks, setBookmarks] = useState<{ id: string, text: string, createdAt: string }[]>([]);
   const [newBookmark, setNewBookmark] = useState('');
   const { user, signOut, isAdmin } = useAuth();
   const navigate = useNavigate();
@@ -91,28 +90,85 @@ export const Navbar = () => {
     setNotifications(notifications.map(n => ({ ...n, read: true })));
   };
 
-  // Bookmark functions
-  const addBookmark = () => {
-    if (!newBookmark.trim()) return;
-    const bookmark = {
-      id: Date.now(),
-      text: newBookmark.trim(),
-      createdAt: new Date()
+  // Fetch bookmarks from MongoDB on mount or user change
+  useEffect(() => {
+    const fetchBookmarks = async () => {
+      if (!user) return;
+      try {
+        const userId = authService.getUserId();
+        const response = await fetch(`${MONGODB_API_URL}/api/user-content/bookmarks`, {
+          headers: userId ? { 'user-id': userId } : {}
+        });
+        const data = await response.json();
+        if (data.success) {
+          setBookmarks(data.data.map((b: any) => ({
+            id: b._id,
+            text: b.title || b.text || 'Untitled Bookmark',
+            createdAt: b.createdAt
+          })));
+        }
+      } catch (error) {
+        console.error('Failed to fetch bookmarks:', error);
+      }
     };
-    const updated = [...bookmarks, bookmark];
-    setBookmarks(updated);
-    localStorage.setItem('tnpsc-bookmarks', JSON.stringify(updated));
-    setNewBookmark('');
-    toast({
-      title: "Bookmark added",
-      description: "Your note has been saved.",
-    });
+    fetchBookmarks();
+  }, [user]);
+
+  // Bookmark functions
+  const handleAddBookmark = async () => {
+    if (!newBookmark.trim() || !user) return;
+
+    try {
+      const userId = authService.getUserId();
+      const response = await fetch(`${MONGODB_API_URL}/api/user-content/bookmarks`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'user-id': userId || ''
+        },
+        body: JSON.stringify({
+          documentId: '65d0f0f0f0f0f0f0f0f0f0f0', // Placeholder or real ID if applicable
+          text: newBookmark.trim()
+        })
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        setBookmarks(prev => [{
+          id: data.data._id,
+          text: newBookmark.trim(),
+          createdAt: new Date().toISOString()
+        }, ...prev]);
+        setNewBookmark('');
+        toast({
+          title: "Bookmark added",
+          description: "Your note has been saved to your account.",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to save bookmark",
+        variant: "destructive"
+      });
+    }
   };
 
-  const removeBookmark = (id: number) => {
-    const updated = bookmarks.filter(b => b.id !== id);
-    setBookmarks(updated);
-    localStorage.setItem('tnpsc-bookmarks', JSON.stringify(updated));
+  const handleRemoveBookmark = async (id: string) => {
+    try {
+      const userId = authService.getUserId();
+      const response = await fetch(`${MONGODB_API_URL}/api/user-content/bookmarks/${id}`, {
+        method: 'DELETE',
+        headers: { 'user-id': userId || '' }
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        setBookmarks(prev => prev.filter(b => b.id !== id));
+      }
+    } catch (error) {
+      console.error('Failed to remove bookmark:', error);
+    }
   };
 
   // Zoom functions
@@ -206,8 +262,8 @@ export const Navbar = () => {
                       to={item.href}
                       onClick={() => setIsOpen(false)}
                       className={`flex items-center gap-3 p-3 rounded-lg transition-colors ${item.highlight
-                          ? 'bg-primary text-primary-foreground hover:bg-primary/90'
-                          : 'hover:bg-accent'
+                        ? 'bg-primary text-primary-foreground hover:bg-primary/90'
+                        : 'hover:bg-accent'
                         }`}
                     >
                       <Icon className="h-5 w-5" />
@@ -342,9 +398,9 @@ export const Navbar = () => {
                       onChange={(e) => setNewBookmark(e.target.value)}
                       placeholder="Save a hint or query..."
                       className="h-8 text-sm"
-                      onKeyDown={(e) => e.key === 'Enter' && addBookmark()}
+                      onKeyDown={(e) => e.key === 'Enter' && handleAddBookmark()}
                     />
-                    <Button size="sm" onClick={addBookmark} className="h-8">
+                    <Button size="sm" onClick={handleAddBookmark} className="h-8">
                       Add
                     </Button>
                   </div>
@@ -361,7 +417,7 @@ export const Navbar = () => {
                           variant="ghost"
                           size="icon"
                           className="h-6 w-6 text-destructive hover:text-destructive"
-                          onClick={() => removeBookmark(bookmark.id)}
+                          onClick={() => handleRemoveBookmark(bookmark.id)}
                         >
                           ×
                         </Button>
@@ -476,8 +532,8 @@ export const Navbar = () => {
                         to={item.href}
                         onClick={() => setIsOpen(false)}
                         className={`flex items-center gap-3 p-3 rounded-lg transition-colors ${item.highlight
-                            ? 'bg-primary text-primary-foreground hover:bg-primary/90'
-                            : 'hover:bg-accent'
+                          ? 'bg-primary text-primary-foreground hover:bg-primary/90'
+                          : 'hover:bg-accent'
                           }`}
                       >
                         <Icon className="h-5 w-5" />

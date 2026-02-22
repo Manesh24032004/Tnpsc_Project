@@ -1,11 +1,7 @@
 import { useState, useEffect, createContext, useContext } from 'react';
 import { authService } from '@/services/api/authService';
-
-interface User {
-  _id: string;
-  email: string;
-  name: string;
-}
+import { MONGODB_API_URL, API_ENDPOINTS } from '@/services/api/config';
+import type { User } from '@/services/api/types';
 
 interface AuthContextType {
   user: User | null;
@@ -56,8 +52,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     try {
       const response = await authService.register({ email, password, name });
       if (response.success && response.data) {
+        // User is set via login/register which returns the user object
         setUser(response.data.user);
-        setIsAdmin(false); // New users are not admin by default
+        setIsAdmin(false);
         return { error: null };
       }
       return { error: response.error || 'Registration failed' };
@@ -69,11 +66,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const signIn = async (email: string, password: string) => {
     try {
       const response = await authService.login({ email, password });
+
       if (response.success && response.data) {
         setUser(response.data.user);
-        // Check if admin
-        const adminStatus = await authService.isAdmin(response.data.user._id);
-        setIsAdmin(adminStatus);
+        setIsAdmin(response.data.user.role === 'admin');
+        setIsDemoMode(false);
         return { error: null };
       }
       return { error: response.error || 'Login failed' };
@@ -95,7 +92,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     setUser({
       _id: 'demo-admin',
       email: 'admin@demo.com',
-      name: 'Demo Admin'
+      name: 'Demo Admin',
+      role: 'admin',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     });
   };
 

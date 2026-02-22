@@ -9,56 +9,33 @@ const getStats = async (req, res) => {
     try {
         // Get total counts
         const totalUsers = await User.countDocuments();
-        const totalDocuments = await Document.countDocuments();
+        const totalDocuments = await DocumentModel.countDocuments();
 
         // Get role counts
         const adminCount = await UserRole.countDocuments({ role: 'admin' });
         const userCount = await UserRole.countDocuments({ role: 'user' });
 
         // Get document stats by category
-        const syllabusCount = await Document.countDocuments({ category: 'Syllabus' });
-        const booksCount = await Document.countDocuments({ category: 'School Books' });
-        const papersCount = await Document.countDocuments({ category: 'Previous Papers' });
-        const notesCount = await Document.countDocuments({ category: 'Study Notes' });
-        const tirukuralCount = await Document.countDocuments({ category: 'Tirukural' });
-        const tamilScholarsCount = await Document.countDocuments({ category: 'Tamil Scholars' });
+        // Get document stats by category (case-insensitive checks)
+        const syllabusCount = await DocumentModel.countDocuments({ category: { $regex: /^syllabus$/i } });
+        const booksCount = await DocumentModel.countDocuments({ category: { $regex: /^school books$|^books$/i } });
+        const papersCount = await DocumentModel.countDocuments({ category: { $regex: /^previous papers$|^previous-papers$/i } });
+        const notesCount = await DocumentModel.countDocuments({ category: { $regex: /^study notes$|^notes$/i } });
+        const tirukuralCount = await DocumentModel.countDocuments({ category: { $regex: /^tirukural$/i } });
+        const tamilScholarsCount = await DocumentModel.countDocuments({ category: { $regex: /^tamil scholars$|^tamil-scholars$/i } });
 
-        // Calculate total downloads (sum of all downloadCount fields)
+        // Calculate total downloads
         const downloadStats = await DocumentModel.aggregate([
             {
                 $group: {
                     _id: null,
                     totalDownloads: { $sum: '$downloadCount' },
-                    syllabusDownloads: {
-                        $sum: {
-                            $cond: [{ $eq: ['$category', 'syllabus'] }, '$downloadCount', 0]
-                        }
-                    },
-                    booksDownloads: {
-                        $sum: {
-                            $cond: [{ $eq: ['$category', 'books'] }, '$downloadCount', 0]
-                        }
-                    },
-                    papersDownloads: {
-                        $sum: {
-                            $cond: [{ $eq: ['$category', 'previous-papers'] }, '$downloadCount', 0]
-                        }
-                    },
-                    notesDownloads: {
-                        $sum: {
-                            $cond: [{ $eq: ['$category', 'notes'] }, '$downloadCount', 0]
-                        }
-                    },
-                    tirukuralDownloads: {
-                        $sum: {
-                            $cond: [{ $eq: ['$category', 'tirukural'] }, '$downloadCount', 0]
-                        }
-                    },
-                    tamilScholarsDownloads: {
-                        $sum: {
-                            $cond: [{ $eq: ['$category', 'tamil-scholars'] }, '$downloadCount', 0]
-                        }
-                    }
+                    syllabusDownloads: { $sum: { $cond: [{ $regexMatch: { input: '$category', regex: /^syllabus$/i } }, '$downloadCount', 0] } },
+                    booksDownloads: { $sum: { $cond: [{ $regexMatch: { input: '$category', regex: /^school books$|^books$/i } }, '$downloadCount', 0] } },
+                    papersDownloads: { $sum: { $cond: [{ $regexMatch: { input: '$category', regex: /^previous papers$|^previous-papers$/i } }, '$downloadCount', 0] } },
+                    notesDownloads: { $sum: { $cond: [{ $regexMatch: { input: '$category', regex: /^study notes$|^notes$/i } }, '$downloadCount', 0] } },
+                    tirukuralDownloads: { $sum: { $cond: [{ $regexMatch: { input: '$category', regex: /^tirukural$/i } }, '$downloadCount', 0] } },
+                    tamilScholarsDownloads: { $sum: { $cond: [{ $regexMatch: { input: '$category', regex: /^tamil scholars$|^tamil-scholars$/i } }, '$downloadCount', 0] } }
                 }
             }
         ]);

@@ -11,33 +11,28 @@ class AuthService {
     return localStorage.getItem('user_id');
   }
 
-  // Set user data in localStorage
-  setUserData(userId: string, email: string, name: string): void {
+  // Set user data - Only ID for session tracking
+  setUserData(userId: string) {
     localStorage.setItem('user_id', userId);
-    localStorage.setItem('user_email', email);
-    localStorage.setItem('user_name', name);
   }
 
-  // Clear user data from localStorage
-  clearUserData(): void {
+  // Clear user data
+  clearUserData() {
     localStorage.removeItem('user_id');
-    localStorage.removeItem('user_email');
-    localStorage.removeItem('user_name');
   }
 
-  // Register - Saves to MongoDB
-  async register(userData: RegisterRequest): Promise<ApiResponse<AuthResponse>> {
+  // Register a new user
+  async register(request: RegisterRequest): Promise<ApiResponse<AuthResponse>> {
     try {
       const response = await fetch(`${MONGODB_API_URL}${API_ENDPOINTS.REGISTER}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(userData),
+        body: JSON.stringify(request),
       });
       const data = await response.json();
-
       if (data.success && data.data?.user) {
-        // Store user data in localStorage
-        this.setUserData(data.data.user._id, data.data.user.email, data.data.user.name);
+        // Store user ID for session
+        this.setUserData(data.data.user._id);
 
         // Add token for compatibility (use user ID as token)
         return {
@@ -48,28 +43,26 @@ class AuthService {
           }
         };
       }
-
       return data;
     } catch (error: any) {
       return { success: false, error: error.message };
     }
   }
 
-  // Login - Fetches from MongoDB
-  async login(credentials: LoginRequest): Promise<ApiResponse<AuthResponse>> {
+  // Login a user
+  async login(request: LoginRequest): Promise<ApiResponse<AuthResponse>> {
     try {
       const response = await fetch(`${MONGODB_API_URL}${API_ENDPOINTS.LOGIN}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(credentials),
+        body: JSON.stringify(request),
       });
       const data = await response.json();
-
       if (data.success && data.data?.user) {
-        // Store user data in localStorage
-        this.setUserData(data.data.user._id, data.data.user.email, data.data.user.name);
+        // Store user ID for session
+        this.setUserData(data.data.user._id);
 
-        // Add token for compatibility (use user ID as token)
+        // Add token for compatibility
         return {
           ...data,
           data: {
@@ -78,7 +71,6 @@ class AuthService {
           }
         };
       }
-
       return data;
     } catch (error: any) {
       return { success: false, error: error.message };

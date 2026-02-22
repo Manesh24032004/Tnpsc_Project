@@ -10,6 +10,7 @@ export interface User {
   _id: string;
   email: string;
   name: string;
+  role?: 'admin' | 'user';
   password?: string; // Only for registration, never returned from API
   createdAt: string;
   updatedAt: string;

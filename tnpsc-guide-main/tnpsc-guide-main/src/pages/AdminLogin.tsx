@@ -32,36 +32,34 @@ const AdminLogin = () => {
     }
   }, [user, isAdmin, loading, isDemoMode, navigate]);
 
-  // Handle login with hardcoded admin credentials
+  // Handle login with real backend authentication
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setIsSubmitting(true);
 
-    // Check for hardcoded admin credentials
-    const ADMIN_EMAIL = 'maneshkavya2004@gmail.com';
-    const ADMIN_PASSWORD = 'M@neshkavya2004';
+    try {
+      const { error: signInError } = await signIn(form.email, form.password);
 
-    if (form.email === ADMIN_EMAIL && form.password === ADMIN_PASSWORD) {
-      // Set admin user directly
+      if (signInError) {
+        setError(signInError);
+        toast({
+          title: "Login Failed",
+          description: signInError,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Login Successful!",
+          description: "Welcome, Admin!",
+        });
+        // The useEffect will handle redirection once user and isAdmin are updated
+      }
+    } catch (err: any) {
+      setError(err.message || 'An unexpected error occurred');
+    } finally {
       setIsSubmitting(false);
-      demoLogin(); // Use demo login to set admin status
-      toast({
-        title: "Login Successful!",
-        description: "Welcome, Admin!",
-      });
-      navigate('/admin');
-      return;
     }
-
-    // If credentials don't match, show error
-    setIsSubmitting(false);
-    setError('Invalid admin credentials. Access denied.');
-    toast({
-      title: "Login Failed",
-      description: "Invalid email or password",
-      variant: "destructive",
-    });
   };
 
   return (

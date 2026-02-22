@@ -45,6 +45,10 @@ const login = async (req, res) => {
             return res.status(401).json({ success: false, error: 'Invalid email or password' });
         }
 
+        // Check user role
+        const userRole = await UserRole.findOne({ userId: user._id });
+        const role = userRole ? userRole.role : 'user';
+
         res.json({
             success: true,
             data: {
@@ -52,6 +56,7 @@ const login = async (req, res) => {
                     _id: user._id,
                     email: user.email,
                     name: user.name,
+                    role: role,
                 },
             },
         });

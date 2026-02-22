@@ -1,4 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
+import { authService } from '@/services/api/authService';
+import { MONGODB_API_URL } from '@/services/api/config';
 import { Send, Paperclip, Image, ArrowLeft, Home, Bot, User, Mic, MicOff, Plus, History, Menu, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -38,33 +40,90 @@ const TNPSCWizardAI = () => {
   const [showSidebar, setShowSidebar] = useState(false);
   const [chatHistories, setChatHistories] = useState<ChatHistory[]>([]);
   const [currentChatId, setCurrentChatId] = useState<string | null>(null);
-  
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
 
-  // Load chat history from localStorage
+  // Fetch chat history from MongoDB on mount or user change
   useEffect(() => {
-    const saved = localStorage.getItem('tnpsc-chat-histories');
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      setChatHistories(parsed.map((h: any) => ({
-        ...h,
-        createdAt: new Date(h.createdAt),
-        messages: h.messages.map((m: any) => ({
-          ...m,
-          timestamp: new Date(m.timestamp)
-        }))
-      })));
-    }
+    const fetchChats = async () => {
+      try {
+        const userId = authService.getUserId();
+        if (!userId) return;
+
+        const response = await fetch(`${MONGODB_API_URL}/api/user-content/chats`, {
+          headers: { 'user-id': userId }
+        });
+        const data = await response.json();
+        if (data.success) {
+          setChatHistories(data.data.map((h: any) => ({
+            id: h._id,
+            title: h.title,
+            messages: h.messages.map((m: any) => ({
+              ...m,
+              id: m._id,
+              type: m.role === 'user' ? 'user' : 'bot',
+              timestamp: new Date(m.timestamp)
+            })),
+            createdAt: new Date(h.createdAt)
+          })));
+        }
+      } catch (error) {
+        console.error('Failed to fetch chat history:', error);
+      }
+    };
+    fetchChats();
   }, []);
 
-  // Save chat history to localStorage
-  const saveChatHistory = (histories: ChatHistory[]) => {
-    localStorage.setItem('tnpsc-chat-histories', JSON.stringify(histories));
-    setChatHistories(histories);
+  // Save/Update chat in MongoDB
+  const handleSaveChat = async (hist: ChatHistory) => {
+    try {
+      const userId = authService.getUserId();
+      if (!userId) return;
+
+      const response = await fetch(`${MONGODB_API_URL}/api/user-content/chats`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'user-id': userId
+        },
+        body: JSON.stringify({
+          id: hist.id.length > 20 ? hist.id : undefined, // Check if it's a mongo ID or temporary
+          title: hist.title,
+          messages: hist.messages.map(m => ({
+            role: m.type === 'bot' ? 'assistant' : 'user',
+            content: m.content,
+            timestamp: m.timestamp
+          }))
+        })
+      });
+      const data = await response.json();
+      if (data.success) {
+        // Update local state with the saved chat (to get the real ID)
+        const savedChat = {
+          id: data.data._id,
+          title: data.data.title,
+          messages: data.data.messages.map((m: any) => ({
+            ...m,
+            id: m._id,
+            type: m.role === 'user' ? 'user' : 'bot',
+            timestamp: new Date(m.timestamp)
+          })),
+          createdAt: new Date(data.data.createdAt)
+        };
+
+        setChatHistories(prev => {
+          const filtered = prev.filter(h => h.id !== hist.id && h.id !== savedChat.id);
+          return [savedChat, ...filtered];
+        });
+        setCurrentChatId(savedChat.id);
+      }
+    } catch (error) {
+      console.error('Failed to save chat:', error);
+    }
   };
 
   const scrollToBottom = () => {
@@ -76,16 +135,15 @@ const TNPSCWizardAI = () => {
   }, [messages]);
 
   const handleNewChat = () => {
-    // Save current chat if it has messages
+    // If current chat has messages, save it before resetting
     if (messages.length > 1) {
-      const newHistory: ChatHistory = {
-        id: Date.now().toString(),
+      const chatToSave: ChatHistory = {
+        id: currentChatId || Date.now().toString(),
         title: messages[1]?.content.slice(0, 30) + '...' || 'New Chat',
         messages: messages,
         createdAt: new Date(),
       };
-      const updated = [newHistory, ...chatHistories];
-      saveChatHistory(updated);
+      handleSaveChat(chatToSave);
     }
 
     // Reset to new chat
@@ -136,7 +194,7 @@ const TNPSCWizardAI = () => {
 
   const getBotResponse = (query: string): string => {
     const lowerQuery = query.toLowerCase();
-    
+
     if (lowerQuery.includes('syllabus') || lowerQuery.includes('பாடத்திட்டம்')) {
       return 'TNPSC தேர்வுகளுக்கான பாடத்திட்டங்களை நீங்கள் Syllabus பகுதியில் காணலாம். G-1, G-2/IIA, மற்றும் G-IV தேர்வுகளுக்கான முழுமையான பாடத்திட்டங்கள் உள்ளன.';
     }
@@ -149,7 +207,7 @@ const TNPSCWizardAI = () => {
     if (lowerQuery.includes('tirukural') || lowerQuery.includes('திருக்குறள்')) {
       return 'திருக்குறள் பகுதியில் திருவள்ளுவரின் வரலாறு மற்றும் 20 அதிகாரங்கள் உள்ளன. TNPSC தேர்வுக்கு மிக முக்கியமான பகுதி இது.';
     }
-    
+
     return 'உங்கள் கேள்விக்கு நன்றி! TNPSC தேர்வு தயாரிப்புக்கு Syllabus, Books, Past Year Questions, மற்றும் Tirukural பகுதிகளை பயன்படுத்துங்கள். மேலும் உதவி தேவைப்பட்டால் கேளுங்கள்!';
   };
 
@@ -210,7 +268,7 @@ const TNPSCWizardAI = () => {
             timestamp: new Date(),
           };
           setMessages((prev) => [...prev, userMessage]);
-          
+
           setIsTyping(true);
           setTimeout(() => {
             const botMessage: Message = {
@@ -253,7 +311,7 @@ const TNPSCWizardAI = () => {
   return (
     <div className="min-h-screen bg-gradient-soft flex flex-col">
       <Navbar />
-      
+
       <main className="flex-1 container mx-auto px-4 py-4 flex flex-col max-w-4xl relative">
         {/* Sidebar for Chat History */}
         <div className={`fixed inset-y-0 left-0 z-50 w-72 bg-card border-r border-border transform transition-transform duration-300 ${showSidebar ? 'translate-x-0' : '-translate-x-full'}`}>
@@ -264,14 +322,14 @@ const TNPSCWizardAI = () => {
                 <X className="h-5 w-5" />
               </Button>
             </div>
-            
+
             <div className="p-4">
               <Button onClick={handleNewChat} className="w-full" variant="outline">
                 <Plus className="h-4 w-4 mr-2" />
                 New Chat
               </Button>
             </div>
-            
+
             <ScrollArea className="flex-1 px-4">
               {chatHistories.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-4">No chat history yet</p>
@@ -297,7 +355,7 @@ const TNPSCWizardAI = () => {
 
         {/* Overlay when sidebar is open */}
         {showSidebar && (
-          <div 
+          <div
             className="fixed inset-0 bg-black/50 z-40"
             onClick={() => setShowSidebar(false)}
           />
@@ -328,14 +386,14 @@ const TNPSCWizardAI = () => {
             </div>
           </div>
           <div className="flex gap-4">
-            <button 
+            <button
               className="flex flex-col items-center text-primary-foreground hover:opacity-80 transition-opacity"
               onClick={() => setShowSidebar(true)}
             >
               <History className="h-5 w-5" />
               <span className="text-xs mt-1">History</span>
             </button>
-            <button 
+            <button
               className="flex flex-col items-center text-primary-foreground hover:opacity-80 transition-opacity"
               onClick={handleNewChat}
             >
@@ -355,11 +413,10 @@ const TNPSCWizardAI = () => {
                   className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}
                 >
                   <div
-                    className={`max-w-[80%] p-3 rounded-2xl ${
-                      message.type === 'user'
-                        ? 'bg-primary text-primary-foreground rounded-br-md'
-                        : 'bg-muted text-foreground rounded-bl-md'
-                    }`}
+                    className={`max-w-[80%] p-3 rounded-2xl ${message.type === 'user'
+                      ? 'bg-primary text-primary-foreground rounded-br-md'
+                      : 'bg-muted text-foreground rounded-bl-md'
+                      }`}
                   >
                     <div className="flex items-start gap-2">
                       {message.type === 'bot' && (
@@ -379,7 +436,7 @@ const TNPSCWizardAI = () => {
                   </div>
                 </div>
               ))}
-              
+
               {isTyping && (
                 <div className="flex justify-start">
                   <div className="bg-muted text-foreground p-3 rounded-2xl rounded-bl-md">
@@ -394,7 +451,7 @@ const TNPSCWizardAI = () => {
                   </div>
                 </div>
               )}
-              
+
               <div ref={messagesEndRef} />
             </div>
           </ScrollArea>
@@ -468,7 +525,7 @@ const TNPSCWizardAI = () => {
           </div>
         </div>
       </main>
-      
+
       <Footer />
     </div>
   );
